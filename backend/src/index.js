@@ -3,6 +3,7 @@ import dotenvb from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import codeBlockRoutes from './routes/codeBlockRoutes.js';
+import path from "path";
 
 import { connectDB } from "./lib/db.js";
 import { app, server } from "./lib/socket.js";
