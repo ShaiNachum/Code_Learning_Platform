@@ -8,13 +8,9 @@ import { CodeBlock } from '../models/CodeBlock.js';
 const app = express();
 const server = http.createServer(app);
 
-const allowedOrigins = process.env.NODE_ENV === "production"
-    ? [process.env.FRONTEND_URL || "https://your-app-name.onrender.com"]
-    : ["http://localhost:5173"];
-
 const io = new Server(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: ["http://localhost:5173"],
         credentials: true,
     },
 });
