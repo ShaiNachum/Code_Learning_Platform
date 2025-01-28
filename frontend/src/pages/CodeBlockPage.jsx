@@ -7,14 +7,23 @@ import { javascript } from '@codemirror/lang-javascript';
 import { dracula } from '@uiw/codemirror-theme-dracula';
 import Celebration from '../components/Celebration';
 
+// Configure base URL based on environment
+// In development, we use the full localhost URL
+// In production, we use a relative path which automatically uses the same domain
+const BASE_URL = import.meta.env.MODE === "development" ? "http://localhost:5001" : "/";
+
 const CodeBlockPage = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const socket = useRef(null);
-    const [showCelebration, setShowCelebration] = useState(false);
-    // Add state for solution visibility
-    const [showSolution, setShowSolution] = useState(false);
     
+    // State management for UI components and connection status
+    const [showCelebration, setShowCelebration] = useState(false);
+    const [showSolution, setShowSolution] = useState(false);
+    const [isConnecting, setIsConnecting] = useState(true);
+    const [connectionError, setConnectionError] = useState(null);
+    
+    // Get required state and functions from our code store
     const {
         currentBlock,
         isMentor,
@@ -28,7 +37,7 @@ const CodeBlockPage = () => {
         resetCurrentBlock,
     } = useCodeStore();
 
-    // Function to handle solution reveal with confirmation
+    // Handler for revealing/hiding the solution with confirmation
     const handleRevealSolution = () => {
         if (!showSolution) {
             const confirmed = window.confirm(
@@ -42,24 +51,42 @@ const CodeBlockPage = () => {
         }
     };
 
+    // Initialize socket connection and set up event handlers
     useEffect(() => {
         const initializeSocket = async () => {
             try {
+                // First fetch the code block data
                 await fetchCodeBlock(id);
                 
-                socket.current = io('http://localhost:5001');
+                // Initialize socket connection with configuration
+                socket.current = io(BASE_URL, {
+                    withCredentials: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    timeout: 10000,
+                });
                 
-                // First check if mentor is present
-                const response = await fetch(`http://localhost:5001/api/codeblocks/${id}`);
+                // Set up connection event handlers
+                socket.current.on('connect', () => {
+                    setIsConnecting(false);
+                    setConnectionError(null);
+                });
+
+                socket.current.on('connect_error', (error) => {
+                    console.error('Socket connection error:', error);
+                    setConnectionError('Unable to connect to server. Please try again.');
+                    setIsConnecting(false);
+                });
+
+                // Check for mentor presence and determine role
+                const response = await fetch(`${import.meta.env.MODE === "development" ? BASE_URL : ""}/api/codeblocks/${id}`);
                 const data = await response.json();
                 const willBeMentor = !data.mentorPresent;
                 
                 setIsMentor(willBeMentor);
-                
-                // Join room with determined role
                 socket.current.emit('join-room', { roomId: id, isMentor: willBeMentor });
-                
-                // Socket event listeners
+
+                // Set up socket event listeners for room interactions
                 socket.current.on('join-error', (error) => {
                     console.error('Join error:', error);
                     navigate('/');
@@ -80,17 +107,19 @@ const CodeBlockPage = () => {
                 
                 socket.current.on('solution-matched', () => {
                     setShowCelebration(true);
-                    // Automatically reveal solution when matched
                     setShowSolution(true);
                 });
+                
             } catch (error) {
                 console.error('Error initializing:', error);
-                navigate('/');
+                setConnectionError('Failed to initialize session. Please try again.');
+                setIsConnecting(false);
             }
         };
 
         initializeSocket();
 
+        // Cleanup function to handle component unmount
         return () => {
             if (socket.current) {
                 socket.current.emit('leave-room');
@@ -98,14 +127,43 @@ const CodeBlockPage = () => {
             }
             resetCurrentBlock();
         };
-    }, [id]);
+    }, [id]); // Only re-run if the id changes
 
+    // Handler for code changes, disabled for mentors
     const handleCodeChange = (value) => {
         if (isMentor) return; // Prevent mentor from editing
         updateCurrentBlock(value);
         socket.current.emit('code-change', { roomId: id, code: value });
     };
 
+    // Loading state while connecting
+    if (isConnecting) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <span className="loading loading-spinner loading-lg"></span>
+                <p className="ml-2">Connecting to server...</p>
+            </div>
+        );
+    }
+
+    // Error state if connection fails
+    if (connectionError) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen">
+                <div className="alert alert-error">
+                    <span>{connectionError}</span>
+                </div>
+                <button 
+                    className="btn btn-primary mt-4"
+                    onClick={() => navigate('/')}
+                >
+                    Return to Lobby
+                </button>
+            </div>
+        );
+    }
+
+    // Loading state while waiting for code block data
     if (!currentBlock) {
         return (
             <div className="flex items-center justify-center min-h-screen">
@@ -114,6 +172,7 @@ const CodeBlockPage = () => {
         );
     }
 
+    // Main component render
     return (
         <div className="container mx-auto px-4 py-8">
             {/* Header Section */}
