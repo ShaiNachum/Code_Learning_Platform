@@ -80,9 +80,3 @@ Code_Learning_Platform/
 ## License
 
 This project is licensed under the ISC License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Thanks to all contributors who have helped shape this platform
-- Built with modern web technologies and best practices
-- Inspired by the need for better collaborative coding education tools
